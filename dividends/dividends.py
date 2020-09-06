@@ -569,7 +569,7 @@ class Dividends(IconScoreBase):
             count = remaining_addresses
         end = start + count
         dividend = self._remaining_tap_divs.get()
-        tokens_total = self._total_eligible_tap_tokens.get()
+        tokens_total = self._total_eligible_staked_tap_tokens.get()
         for i in range(start, end):
             address = self._stake_holders[i]
             holder_balance = self._stake_balances[address]
@@ -593,7 +593,7 @@ class Dividends(IconScoreBase):
                             f"Exception: {e}"
                         )
         self._remaining_tap_divs.set(dividend)
-        self._total_eligible_tap_tokens.set(tokens_total)
+        self._total_eligible_staked_tap_tokens.set(tokens_total)
         if end == length or dividend <= 0:
             self._stake_dist_index.set(0)
             self._remaining_tap_divs.set(0)
@@ -763,7 +763,7 @@ class Dividends(IconScoreBase):
         :return:
         """
         token_score = self.create_interface_score(self._token_score.get(), TokenInterface)
-        self._total_eligible_tap_tokens.set(token_score.total_staked_balance())
+        self._total_eligible_staked_tap_tokens.set(token_score.total_staked_balance())
 
     def _set_games(self) -> None:
         """
