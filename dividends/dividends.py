@@ -363,9 +363,7 @@ class Dividends(IconScoreBase):
         if self._dividends_received.get() == 1:
             self._divs_dist_complete.set(False)
             self._dividends_received.set(2)
-            if self._switch_dividends_to_staked_tap.get():
-                token_score.switch_stake_update_db()
-            else:
+            if not self._switch_dividends_to_staked_tap.get():
                 token_score.switch_address_update_db()
                 # calculate total eligible tap
                 self._set_total_tap()
@@ -373,6 +371,7 @@ class Dividends(IconScoreBase):
         elif self._dividends_received.get() == 2:
             if self._switch_dividends_to_staked_tap.get():
                 if self._update_stake_balances():
+                    token_score.switch_stake_update_db()
                     # calculate total eligible staked tap tokens
                     self._set_total_staked_tap()
                     self._dividends_received.set(3)
