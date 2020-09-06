@@ -826,8 +826,9 @@ class Dividends(IconScoreBase):
         self._remaining_gamedev_divs.set(game_developers_amount)
         self._platform_divs.set(0)
         if tap_holders_amount > 0:
-            self._remaining_tap_divs.set(tap_holders_amount * 80 // 90)
-            self._promo_divs.set(tap_holders_amount * 10 // 90)
+            tap_divs = tap_holders_amount * 80 // 90
+            self._remaining_tap_divs.set(tap_divs)
+            self._promo_divs.set(tap_holders_amount - tap_divs)
         else:
             self._remaining_tap_divs.set(0)
             self._promo_divs.set(0)
