@@ -43,6 +43,11 @@ class TokenInterface(InterfaceScore):
     def total_staked_balance(self) -> int:
         pass
 
+    # Getting staked balance of exception address
+    @interface
+    def staked_balanceOf(self, _owner: Address) -> int:
+        pass
+
 
 # An interface of roulette score to get batch size
 class GameInterface(InterfaceScore):
@@ -910,8 +915,10 @@ class Dividends(IconScoreBase):
             if address not in self._stake_holders:
                 self._stake_holders.put(address)
             tap_balance = tap_token_score.balanceOf(Address.from_string(address))
+            staked_balance = tap_token_score.staked_balanceOf(Address.from_string(address))
             self._stake_balances[address] = tap_balance
-            self._total_eligible_staked_tap_tokens.set(self._total_eligible_staked_tap_tokens.get()+tap_balance)
+            self._total_eligible_staked_tap_tokens.set(self._total_eligible_staked_tap_tokens.get()+tap_balance
+                                                       - staked_balance)
 
     @payable
     def fallback(self):
