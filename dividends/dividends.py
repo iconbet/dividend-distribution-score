@@ -43,6 +43,11 @@ class TokenInterface(InterfaceScore):
     def total_staked_balance(self) -> int:
         pass
 
+    # Getting staked balance of exception address
+    @interface
+    def staked_balanceOf(self, _owner: Address) -> int:
+        pass
+
 
 # An interface of roulette score to get batch size
 class GameInterface(InterfaceScore):
@@ -104,6 +109,8 @@ class Dividends(IconScoreBase):
     _STAKE_DIST_INDEX = "stake_dist_index"
 
     _SWITCH_DIVIDENDS_TO_STAKED_TAP = "switch_dividends_to_staked_tap"
+
+    _EXCEPTION_ADDRESS = "exception_address"
 
     @eventlog(indexed=2)
     def FundTransfer(self, winner: str, amount: int, note: str):
@@ -172,13 +179,14 @@ class Dividends(IconScoreBase):
 
         self._switch_dividends_to_staked_tap = VarDB(self._SWITCH_DIVIDENDS_TO_STAKED_TAP, db, value_type=bool)
 
+        self._exception_address = ArrayDB(self._EXCEPTION_ADDRESS, db, value_type=str)
+
     def on_install(self) -> None:
         super().on_install()
         self._total_divs.set(0)
 
     def on_update(self) -> None:
         super().on_update()
-        self._switch_dividends_to_staked_tap.set(False)
 
     @external
     def set_dividend_percentage(self, _tap: int, _gamedev: int, _promo: int, _platform: int) -> None:
@@ -374,6 +382,7 @@ class Dividends(IconScoreBase):
                     token_score.switch_stake_update_db()
                     # calculate total eligible staked tap tokens
                     self._set_total_staked_tap()
+                    self._set_tap_of_exception_address()
                     self._dividends_received.set(3)
             else:
                 if self._update_balances():
@@ -868,6 +877,48 @@ class Dividends(IconScoreBase):
             self._divs_dist_complete.set(False)
         else:
             self._divs_dist_complete.set(True)
+
+    @external(readonly=True)
+    def get_exception_address(self) -> list:
+        return [address for address in self._exception_address]
+
+    @external
+    def add_exception_address(self, _address: Address) -> None:
+        if self.msg.sender != self.owner:
+            revert(f"ICONbet Dividends SCORE: Only owner can add an exception address")
+        str_address = str(_address)
+        if str_address not in self._exception_address:
+            self._exception_address.put(str_address)
+
+    @external
+    def remove_exception_address(self, _address: Address) -> None:
+        if self.msg.sender != self.owner:
+            revert(f"ICONbet Dividends SCORE: Only owner can remove an exception address")
+
+        str_address = str(_address)
+
+        if str_address not in self._exception_address:
+            revert(f"ICONbet Dividends SCORE: Address to remove not found in exception address list.")
+
+        self._stake_balances[str_address] = 0
+        _out = self._exception_address[-1]
+        if _out == str_address:
+            self._exception_address.pop()
+        for index in range(len(self._exception_address) - 1):
+            if self._exception_address[index] == str_address:
+                self._exception_address[index] = _out
+                self._exception_address.pop()
+
+    def _set_tap_of_exception_address(self):
+        tap_token_score = self.create_interface_score(self._token_score.get(), TokenInterface)
+        for idx, address in enumerate(self._exception_address):
+            if address not in self._stake_holders:
+                self._stake_holders.put(address)
+            tap_balance = tap_token_score.balanceOf(Address.from_string(address))
+            staked_balance = tap_token_score.staked_balanceOf(Address.from_string(address))
+            self._stake_balances[address] = tap_balance
+            self._total_eligible_staked_tap_tokens.set(self._total_eligible_staked_tap_tokens.get()+tap_balance
+                                                       - staked_balance)
 
     @payable
     def fallback(self):
