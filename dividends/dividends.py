@@ -1,6 +1,6 @@
 from iconservice import *
 
-TAG = 'DIVS'
+TAG = 'ICONbet Dividends'
 DIVIDEND_CATEGORIES = ["_tap", "_gamedev", "_promo", "_platform"]
 
 
@@ -204,16 +204,16 @@ class Dividends(IconScoreBase):
         :type _platform: int
         """
         if self.msg.sender != self.owner:
-            revert("Only the owner of the score can call the method")
+            revert(f"{TAG}: Only the owner of the score can call the method")
         if not (
             0 <= _tap <= 100
             and 0 <= _gamedev <= 100
             and 0 <= _promo <= 100
             and 0 <= _platform <= 100
         ):
-            revert("The parameters must be between 0 to 100")
+            revert(f"{TAG}: The parameters must be between 0 to 100")
         if _tap + _gamedev + _platform + _promo != 100:
-            revert("Sum of all percentage is not equal to 100")
+            revert(f"{TAG}: Sum of all percentage is not equal to 100")
         for _ in range(len(self._dividend_percentage)):
             self._dividend_percentage.pop()
         self._dividend_percentage.put(_tap)
@@ -258,7 +258,7 @@ class Dividends(IconScoreBase):
     @external
     def toggle_switch_dividends_to_staked_tap_enabled(self) -> None:
         if self.msg.sender != self.owner:
-            revert("Only owner can enable or disable switch dividends to staked tap holders.")
+            revert(f"{TAG}: Only owner can enable or disable switch dividends to staked tap holders.")
         self._switch_dividends_to_staked_tap.set(not self._switch_dividends_to_staked_tap.get())
 
     @external
@@ -279,7 +279,7 @@ class Dividends(IconScoreBase):
         :type _score: :class:`iconservice.base.address.Address`
         """
         if not _score.is_contract:
-            revert(f"{_score} is not a valid contract address")
+            revert(f"{TAG}: {_score} is not a valid contract address")
         if self.msg.sender == self.owner:
             self._promo_score.set(_score)
 
@@ -292,7 +292,7 @@ class Dividends(IconScoreBase):
         :return:
         """
         if not _score.is_contract:
-            revert(f"{_score} is not a valid contract address")
+            revert(f"{TAG}: {_score} is not a valid contract address")
         if self.msg.sender == self.owner:
             self._game_auth_score.set(_score)
 
@@ -359,7 +359,7 @@ class Dividends(IconScoreBase):
         Sets the value of self.owner to the score holding the game treasury.
         """
         if self.tx.origin != self.owner:
-            revert(f"Only the owner can call the untether method.")
+            revert(f"{TAG}: Only the owner can call the untether method.")
         pass
 
     @external
@@ -548,7 +548,7 @@ class Dividends(IconScoreBase):
             if not address_from_str.is_contract:
                 total_platform_tap += token_score.balanceOf(address_from_str)
         if total_platform_tap == 0:
-            revert("No tap found in founder's addresses")
+            revert(f"{TAG}: No tap found in founder's addresses")
         dividends = self._platform_divs.get()
         for address in self._blacklist_address:
             address_from_str = Address.from_string(address)
@@ -636,7 +636,7 @@ class Dividends(IconScoreBase):
         """
         if self.msg.sender == self.owner:
             if _address not in self._blacklist_address:
-                revert(f"{_address} not in blacklist address")
+                revert(f"{TAG}: {_address} not in blacklist address")
             self.BlacklistAddress(_address, "Removed from blacklist")
             top = self._blacklist_address.pop()
             if top != _address:
@@ -687,7 +687,7 @@ class Dividends(IconScoreBase):
         :return:
         """
         if not _score.is_contract:
-            revert(f"{_score} should be a contract address")
+            revert(f"{TAG}: {_score} should be a contract address")
         if self.msg.sender == self.owner:
             self.InhouseGames(_score, "Added as inhouse games")
             if _score not in self._inhouse_games:
@@ -715,10 +715,10 @@ class Dividends(IconScoreBase):
         :return:
         """
         if not _score.is_contract:
-            revert(f"{_score} is not a valid contract address")
+            revert(f"{TAG}: {_score} is not a valid contract address")
         if self.msg.sender == self.owner:
             if _score not in self._inhouse_games:
-                revert(f"{_score} is not in inhouse games list")
+                revert(f"{TAG}: {_score} is not in inhouse games list")
             self.InhouseGames(_score, "Removed from inhouse games list")
             top = self._inhouse_games.pop()
             if top != _score:
@@ -867,7 +867,7 @@ class Dividends(IconScoreBase):
     @external
     def set_divs_share(self, _tap: int, _promo: int, _platform: int, _gamedev: int) -> None:
         if self.msg.sender != self.owner:
-            revert("This method is only available for the owner")
+            revert(f"{TAG}: This method is only available for the owner")
         self._remaining_tap_divs.set(_tap)
         self._promo_divs.set(_promo)
         self._platform_divs.set(_platform)
@@ -876,7 +876,7 @@ class Dividends(IconScoreBase):
     @external
     def toggle_divs_dist(self) -> None:
         if self.msg.sender != self.owner:
-            revert("Only the owner can call this method")
+            revert(f"{TAG}: Only the owner can call this method")
         if self._divs_dist_complete.get():
             self._divs_dist_complete.set(False)
         else:
@@ -889,7 +889,7 @@ class Dividends(IconScoreBase):
     @external
     def add_exception_address(self, _address: Address) -> None:
         if self.msg.sender != self.owner:
-            revert(f"ICONbet Dividends SCORE: Only owner can add an exception address")
+            revert(f"{TAG}:  Only owner can add an exception address")
         str_address = str(_address)
         if str_address not in self._exception_address:
             self._exception_address.put(str_address)
@@ -897,12 +897,12 @@ class Dividends(IconScoreBase):
     @external
     def remove_exception_address(self, _address: Address) -> None:
         if self.msg.sender != self.owner:
-            revert(f"ICONbet Dividends SCORE: Only owner can remove an exception address")
+            revert(f"{TAG}:  Only owner can remove an exception address")
 
         str_address = str(_address)
 
         if str_address not in self._exception_address:
-            revert(f"ICONbet Dividends SCORE: Address to remove not found in exception address list.")
+            revert(f"{TAG}:  Address to remove not found in exception address list.")
 
         self._stake_balances[str_address] = 0
         _out = self._exception_address[-1]
@@ -931,4 +931,4 @@ class Dividends(IconScoreBase):
             self._dividends_received.set(1)
             self.DivsReceived(self._total_divs.get(), self._batch_size.get())
         else:
-            revert(f"Funds can only be accepted from the game contract.")
+            revert(f"{TAG}: Funds can only be accepted from the game contract.")
