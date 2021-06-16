@@ -86,6 +86,7 @@ class Dividends(IconScoreBase):
     _REMAINING_GAMEDEV_DIVS = "remaining_gamedev_divs"
     _PLATFORM_DIVS = "platform_divs"
     _PROMO_DIVS = "promo_divs"
+    _DAOFUND_DIVS = "daofund_divs"
 
     _TOTAL_ELIGIBLE_TAP_TOKENS = "remaining_tokens"
     _BLACKLIST_ADDRESS = "blacklist_addresses"
@@ -100,6 +101,7 @@ class Dividends(IconScoreBase):
     _TOKEN_SCORE = "token_score"
     _GAME_SCORE = "game_score"
     _PROMO_SCORE = "promo_score"
+    _DAOFUND_SCORE = "daofund_score"
     _GAME_AUTH_SCORE = "game_auth_score"
     _DIVIDENDS_RECEIVED = "dividends_received"
 
@@ -157,6 +159,7 @@ class Dividends(IconScoreBase):
         self._remaining_gamedev_divs = VarDB(self._REMAINING_GAMEDEV_DIVS, db, value_type=int)
         self._platform_divs = VarDB(self._PLATFORM_DIVS, db, value_type=int)
         self._promo_divs = VarDB(self._PROMO_DIVS, db, value_type=int)
+        self._daofund_divs = VarDB(self._DAOFUND_DIVS, db, value_type=int)
 
         # Games marked as inhouse games
         self._inhouse_games = ArrayDB(self._INHOUSE_GAMES, db, value_type=Address)
@@ -169,6 +172,7 @@ class Dividends(IconScoreBase):
         self._game_score = VarDB(self._GAME_SCORE, db, value_type=Address)
         self._promo_score = VarDB(self._PROMO_SCORE, db, value_type=Address)
         self._game_auth_score = VarDB(self._GAME_AUTH_SCORE, db, value_type=Address)
+        self._daofund_score = VarDB(self._DAOFUND_SCORE, db, value_type=Address)
 
         self._dividends_received = VarDB(self._DIVIDENDS_RECEIVED, db, value_type=int)
 
@@ -187,6 +191,7 @@ class Dividends(IconScoreBase):
 
     def on_update(self) -> None:
         super().on_update()
+        self._daofund_score.set(Address.from_string("cx3efe110f76be1c223547f4c1a62dcc681f11af34"))
 
     @external
     def set_dividend_percentage(self, _tap: int, _gamedev: int, _promo: int, _platform: int) -> None:
@@ -284,6 +289,18 @@ class Dividends(IconScoreBase):
             self._promo_score.set(_score)
 
     @external
+    def set_daofund_score(self, _score: Address) -> None:
+        """
+        Sets the promo score address. The function can only be invoked by score owner.
+        :param _score: Score address of the daofund
+        :type _score: :class:`iconservice.base.address.Address`
+        """
+        if not _score.is_contract:
+            revert(f"{TAG}: {_score} is not a valid contract address")
+        if self.msg.sender == self.owner:
+            self._daofund_score.set(_score)
+
+    @external
     def set_game_auth_score(self, _score: Address) -> None:
         """
         Sets the game authorization score address. The method can only be invoked by score owner
@@ -322,6 +339,15 @@ class Dividends(IconScoreBase):
         :rtype: :class:`iconservice.base.address.Address`
         """
         return self._promo_score.get()
+
+    @external(readonly=True)
+    def get_daofund_score(self) -> Address:
+        """
+        Returns the promotion score address.
+        :return: Address of the daofund score
+        :rtype: :class:`iconservice.base.address.Address`
+        """
+        return self._daofund_score.get()
 
     @external(readonly=True)
     def get_game_auth_score(self) -> Address:
@@ -402,6 +428,7 @@ class Dividends(IconScoreBase):
                 self._remaining_tap_divs.set(balance)
                 self._remaining_gamedev_divs.set(0)
                 self._promo_divs.set(0)
+                self._daofund_divs.set(0)
                 self._platform_divs.set(0)
             elif self._switch_dividends_to_staked_tap.get():
                 self._set_games_ip()
@@ -431,6 +458,8 @@ class Dividends(IconScoreBase):
                 self._distribute_to_tap_holders()
         elif self._promo_divs.get() > 0:
             self._distribute_to_promo_address()
+        elif self._daofund_divs.get() > 0:
+            self._distribute_to_daofund_address()
         elif self._remaining_gamedev_divs.get() > 0:
             self._distribute_to_game_developers()
         elif self._platform_divs.get() > 0:
@@ -501,6 +530,22 @@ class Dividends(IconScoreBase):
                     f"Will try again later. "
                     f"Exception: {e}"
                 )
+
+    def _distribute_to_daofund_address(self) -> None:
+        """
+        Distributes the dividend according to set percentage for DAOFund
+        """
+        amount = self._daofund_divs.get()
+        address = self._daofund_score.get()
+        if amount > 0:
+            try:
+                self.FundTransfer(str(address), amount, "Dividends distribution to DAOFund contract")
+                self.icx.transfer(self._daofund_score.get(), amount)
+                self._daofund_divs.set(0)
+            except BaseException as e:
+                revert(
+                    f"{TAG}: Network problem while sending to game SCORE. Distribution of {amount} not sent to {address}. "
+                    f"Will try again later. Exception: {e}")
 
     def _distribute_to_game_developers(self) -> None:
         """
@@ -821,22 +866,30 @@ class Dividends(IconScoreBase):
         game_auth_score = self.create_interface_score(self._game_auth_score.get(), GameAuthorizationInterface)
         games_excess = game_auth_score.get_yesterdays_games_excess()
         third_party_excess: int = 0
+        inhouse_excess: int = 0
 
         for game in games_excess.keys():
             game_address = Address.from_string(game)
-            if int(games_excess[game]) > 0 and game_address not in self._inhouse_games:
-                if game_address not in self._games_list:
-                    self._games_list.put(game_address)
-                self._games_excess[game] = int(games_excess[game])
-                revshare = game_auth_score.get_revshare_wallet_address(game_address)
-                if self._revshare_wallet_address[game] != revshare:
-                    self._revshare_wallet_address[game] = revshare
-                third_party_excess += int(games_excess[game])
+            if int(games_excess[game]) > 0:
+                if game_address not in self._inhouse_games:
+                    if game_address not in self._games_list:
+                        self._games_list.put(game_address)
+                    self._games_excess[game] = int(games_excess[game])
+                    revshare = game_auth_score.get_revshare_wallet_address(
+                        game_address)
+                    if self._revshare_wallet_address[game] != revshare:
+                        self._revshare_wallet_address[game] = revshare
+                    third_party_excess += int(games_excess[game])
+
+                elif game_address in self._inhouse_games:
+                    inhouse_excess += int(games_excess[game])
 
         game_developers_amount = (third_party_excess * 20) // 100
-        tap_holders_amount = self.icx.get_balance(self.address) - game_developers_amount
+        daofund_amount = (inhouse_excess * 20) // 100
+        tap_holders_amount = self.icx.get_balance(self.address) - game_developers_amount - daofund_amount
 
         self._remaining_gamedev_divs.set(game_developers_amount)
+        self._daofund_divs.set(daofund_amount)
         self._platform_divs.set(0)
         if tap_holders_amount > 0:
             tap_divs = tap_holders_amount * 80 // 90
