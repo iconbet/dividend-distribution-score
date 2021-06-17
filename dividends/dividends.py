@@ -238,10 +238,6 @@ class Dividends(IconScoreBase):
             response[category] = self._dividend_percentage.get(index)
         return response
 
-    @external(readonly=True)
-    def name(self) -> str:
-        return TAG
-
     @external
     def set_token_score(self, _score: Address) -> None:
         """
