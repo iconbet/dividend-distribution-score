@@ -211,10 +211,10 @@ class Dividends(IconScoreBase):
         if self.msg.sender != self.owner:
             revert(f"{TAG}: Only the owner of the score can call the method")
         if not (
-            0 <= _tap <= 100
-            and 0 <= _gamedev <= 100
-            and 0 <= _promo <= 100
-            and 0 <= _platform <= 100
+                0 <= _tap <= 100
+                and 0 <= _gamedev <= 100
+                and 0 <= _promo <= 100
+                and 0 <= _platform <= 100
         ):
             revert(f"{TAG}: The parameters must be between 0 to 100")
         if _tap + _gamedev + _platform + _promo != 100:
@@ -845,8 +845,9 @@ class Dividends(IconScoreBase):
         game_developers_amount = (game_developers_share * positive_excess) // 100
         tap_holders_amount = self.icx.get_balance(self.address) - game_developers_amount
 
-        self._remaining_gamedev_divs.set((self._dividend_percentage[1] * game_developers_amount)//game_developers_share)
-        self._platform_divs.set((self._dividend_percentage[3] * game_developers_amount)//game_developers_share)
+        self._remaining_gamedev_divs.set(
+            (self._dividend_percentage[1] * game_developers_amount) // game_developers_share)
+        self._platform_divs.set((self._dividend_percentage[3] * game_developers_amount) // game_developers_share)
         if tap_holders_amount > 0:
             tap_holders_share = (self._dividend_percentage[0] + self._dividend_percentage[2])
             self._remaining_tap_divs.set((self._dividend_percentage[0] * tap_holders_amount) // tap_holders_share)
@@ -970,7 +971,7 @@ class Dividends(IconScoreBase):
             tap_balance = tap_token_score.balanceOf(Address.from_string(address))
             staked_balance = tap_token_score.staked_balanceOf(Address.from_string(address))
             self._stake_balances[address] = tap_balance
-            self._total_eligible_staked_tap_tokens.set(self._total_eligible_staked_tap_tokens.get()+tap_balance
+            self._total_eligible_staked_tap_tokens.set(self._total_eligible_staked_tap_tokens.get() + tap_balance
                                                        - staked_balance)
 
     @payable
