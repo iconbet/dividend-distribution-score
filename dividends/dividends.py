@@ -982,3 +982,12 @@ class Dividends(IconScoreBase):
             self.DivsReceived(self._total_divs.get(), self._batch_size.get())
         else:
             revert(f"{TAG}: Funds can only be accepted from the game contract.")
+
+    @external
+    def update_stake_holders_indexes(self):
+        if self.msg.sender != self.owner:
+            revert(f'{TAG}: Only Owner can migrate the existing data to new setup.')
+        for _address in self._stake_holders:
+            if self._stake_holders_index[_address] == 0:
+                self._stake_holders_copy.put(_address)
+                self._stake_holders_index[_address] = len(self._stake_holders_copy)
