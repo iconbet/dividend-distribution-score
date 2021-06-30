@@ -175,6 +175,9 @@ class Dividends(IconScoreBase):
         self._dividends_received = VarDB(self._DIVIDENDS_RECEIVED, db, value_type=int)
 
         self._stake_holders = ArrayDB(self._STAKE_HOLDERS, db, value_type=str)
+        self._stake_holders_copy = ArrayDB(f'_{self._STAKE_HOLDERS}', db, value_type=str)
+        self._stake_holders_index = DictDB(f'{self._STAKE_HOLDERS}_indexes', db, value_type=int)
+
         self._stake_balances = DictDB(self._STAKE_BALANCES, db, value_type=int)
         self._total_eligible_staked_tap_tokens = VarDB(self._TOTAL_ELIGIBLE_STAKED_TAP_TOKENS, db, value_type=int)
         self._stake_dist_index = VarDB(self._STAKE_DIST_INDEX, db, value_type=int)
@@ -431,9 +434,8 @@ class Dividends(IconScoreBase):
                 self._set_games()
 
             if self._switch_dividends_to_staked_tap.get():
-                self._batch_size.set(game_score.get_batch_size(len(self._stake_holders)))
-            else:
-                self._batch_size.set(game_score.get_batch_size(len(self._tap_holders)))
+                # self._batch_size.set(game_score.get_batch_size(len(self._stake_holders)))
+                self._batch_size.set(game_score.get_batch_size(len(self._stake_holders_copy)))
 
             self._dividends_received.set(0)
 
@@ -571,7 +573,8 @@ class Dividends(IconScoreBase):
         This function distributes the dividends to staked tap token holders.
         """
         count = self._batch_size.get()
-        length = len(self._stake_holders)
+        # length = len(self._stake_holders)
+        length = len(self._stake_holders_copy)
         start = self._stake_dist_index.get()
         remaining_addresses = length - start
         if count > remaining_addresses:
@@ -580,7 +583,8 @@ class Dividends(IconScoreBase):
         dividend = self._remaining_tap_divs.get()
         tokens_total = self._total_eligible_staked_tap_tokens.get()
         for i in range(start, end):
-            address = self._stake_holders[i]
+            # address = self._stake_holders[i]
+            address = self._stake_holders_copy[i]
             holder_balance = self._stake_balances[address]
             if holder_balance > 0 and tokens_total > 0:
                 amount = dividend * holder_balance // tokens_total
@@ -713,8 +717,11 @@ class Dividends(IconScoreBase):
         if len(stake_balances) == 0:
             return True
         for address in stake_balances.keys():
-            if address not in self._stake_holders:
-                self._stake_holders.put(address)
+            # if address not in self._stake_holders:
+            #     self._stake_holders.put(address)
+            if self._stake_holders_index[address] == 0:
+                self._stake_holders_copy.put(address)
+                self._stake_holders_index[address] = len(self._stake_holders_copy)
             self._stake_balances[address] = stake_balances[address]
         return False
 
@@ -832,7 +839,7 @@ class Dividends(IconScoreBase):
 
     @external(readonly=True)
     def get_staked_tap_hold_length(self) -> int:
-        return len(self._stake_holders)
+        return len(self._stake_holders_copy)
 
     @external(readonly=True)
     def divs_share(self) -> dict:
@@ -896,8 +903,12 @@ class Dividends(IconScoreBase):
     def _set_tap_of_exception_address(self):
         tap_token_score = self.create_interface_score(self._token_score.get(), TokenInterface)
         for idx, address in enumerate(self._exception_address):
-            if address not in self._stake_holders:
-                self._stake_holders.put(address)
+            # if address not in self._stake_holders:
+            #     self._stake_holders.put(address)
+            if self._stake_holders_index[address] == 0:
+                self._stake_holders_copy.put(address)
+                self._stake_holders_index[address] = len(self._stake_holders_copy)
+
             tap_balance = tap_token_score.balanceOf(Address.from_string(address))
             staked_balance = tap_token_score.staked_balanceOf(Address.from_string(address))
             self._stake_balances[address] = tap_balance
