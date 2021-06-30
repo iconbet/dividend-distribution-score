@@ -78,7 +78,6 @@ class Dividends(IconScoreBase):
     _TAP_DIST_INDEX = "dist_index"
     _BATCH_SIZE = "batch_size"
 
-    _TAP_HOLDERS = "holders"
     _TAP_BALANCES = "balances"
 
     _TOTAL_DIVS = "total_divs"
@@ -141,7 +140,6 @@ class Dividends(IconScoreBase):
         self._batch_size = VarDB(self._BATCH_SIZE, db, value_type=int)
 
         # Tap holders and their balances of TAP tokens
-        self._tap_holders = ArrayDB(self._TAP_HOLDERS, db, value_type=str)
         self._tap_balances = DictDB(self._TAP_BALANCES, db, value_type=int)
         self._total_eligible_tap_tokens = VarDB(self._TOTAL_ELIGIBLE_TAP_TOKENS, db, value_type=int)
 
@@ -450,8 +448,6 @@ class Dividends(IconScoreBase):
         elif self._remaining_tap_divs.get() > 0:
             if self._switch_dividends_to_staked_tap.get():
                 self._distribute_to_stake_holders()
-            else:
-                self._distribute_to_tap_holders()
         elif self._promo_divs.get() > 0:
             self._distribute_to_promo_address()
         elif self._daofund_divs.get() > 0:
@@ -464,47 +460,6 @@ class Dividends(IconScoreBase):
             self._divs_dist_complete.set(True)
             return True
         return False
-
-    def _distribute_to_tap_holders(self) -> None:
-        """
-        This function distributes the dividends to tap token holders except the blacklist addresses.
-        """
-        count = self._batch_size.get()
-        length = len(self._tap_holders)
-        start = self._tap_dist_index.get()
-        remaining_addresses = length - start
-        if count > remaining_addresses:
-            count = remaining_addresses
-        end = start + count
-        dividend = self._remaining_tap_divs.get()
-        tokens_total = self._total_eligible_tap_tokens.get()
-        for i in range(start, end):
-            address = self._tap_holders[i]
-            holder_balance = self._tap_balances[address]
-            if holder_balance > 0 and tokens_total > 0:
-                amount = dividend * holder_balance // tokens_total
-                dividend -= amount
-                tokens_total -= holder_balance
-                try:
-                    self.icx.transfer(Address.from_string(address), amount)
-                    self.FundTransfer(address, amount, "Dividends distribution to tap holder")
-                except BaseException as e:
-                    if Address.from_string(address).is_contract:
-                        self.set_blacklist_address(address)
-                    else:
-                        revert(
-                            f"Network problem while sending dividends to tap holders."
-                            f"Distribution of {amount} not sent to {address}. "
-                            f"Will try again later. "
-                            f"Exception: {e}"
-                        )
-        self._remaining_tap_divs.set(dividend)
-        self._total_eligible_tap_tokens.set(tokens_total)
-        if end == length or dividend <= 0:
-            self._tap_dist_index.set(0)
-            self._remaining_tap_divs.set(0)
-        else:
-            self._tap_dist_index.set(start + count)
 
     def _distribute_to_promo_address(self) -> None:
         """
@@ -696,27 +651,8 @@ class Dividends(IconScoreBase):
         """
         if self.msg.sender == self.owner:
             self.BlacklistAddress(_address, "Added to Blacklist")
-            if _address in self._tap_holders:
-                self._remove_from_holders_list(_address)
             if _address not in self._blacklist_address:
                 self._blacklist_address.put(_address)
-
-    def _remove_from_holders_list(self, _address: str) -> None:
-        """
-        Removes the address from tap token holders list
-        :param _address: Address to be removed from tap token holders list
-        :type _address: :class:`iconservice.base.address.Address`
-        :return:
-        """
-        if _address not in self._tap_holders:
-            return
-        # get the topmost value
-        top = self._tap_holders.pop()
-        if top != _address:
-            for i in range(len(self._tap_holders)):
-                if self._tap_holders[i] == _address:
-                    self._tap_holders[i] = top
-        self._tap_balances.remove(_address)
 
     @external
     def set_inhouse_games(self, _score: Address) -> None:
@@ -793,8 +729,6 @@ class Dividends(IconScoreBase):
             return True
         for address in tap_balances.keys():
             if address not in self._blacklist_address:
-                if address not in self._tap_holders:
-                    self._tap_holders.put(address)
                 self._tap_balances[address] = tap_balances[address]
         return False
 
@@ -895,10 +829,6 @@ class Dividends(IconScoreBase):
         else:
             self._remaining_tap_divs.set(0)
             self._promo_divs.set(0)
-
-    @external(readonly=True)
-    def get_tap_hold_length(self) -> int:
-        return len(self._tap_holders)
 
     @external(readonly=True)
     def get_staked_tap_hold_length(self) -> int:
