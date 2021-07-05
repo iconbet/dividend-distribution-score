@@ -178,7 +178,6 @@ class Dividends(IconScoreBase):
         self._dividends_received = VarDB(self._DIVIDENDS_RECEIVED, db, value_type=int)
 
         self._stake_holders = ArrayDB(self._STAKE_HOLDERS, db, value_type=str)
-        self._stake_holders_copy = ArrayDB(f'_{self._STAKE_HOLDERS}', db, value_type=str)
         self._stake_holders_index = DictDB(f'{self._STAKE_HOLDERS}_indexes', db, value_type=int)
 
         self._stake_holders_migration_start = VarDB(f'{self._STAKE_HOLDERS}_migration_start', db, value_type=bool)
@@ -416,15 +415,12 @@ class Dividends(IconScoreBase):
                 self._set_total_tap()
 
         elif self._dividends_received.get() == 2:
-            if self._switch_dividends_to_staked_tap.get():
+            if self._stake_holders_migration_complete.get():
                 if self._update_stake_balances():
                     token_score.switch_stake_update_db()
                     # calculate total eligible staked tap tokens
                     self._set_total_staked_tap()
                     self._set_tap_of_exception_address()
-                    self._dividends_received.set(3)
-            else:
-                if self._update_balances():
                     self._dividends_received.set(3)
 
         elif self._dividends_received.get() == 3:
@@ -446,21 +442,15 @@ class Dividends(IconScoreBase):
                 self._set_games()
 
             if self._switch_dividends_to_staked_tap.get():
-                if self._stake_holders_migration_complete.get():
-                    self._batch_size.set(game_score.get_batch_size(len(self._stake_holders_copy)))
-                else:
-                    self._batch_size.set(game_score.get_batch_size(len(self._stake_holders)))
+                self._batch_size.set(game_score.get_batch_size(len(self._stake_holders)))
 
             self._dividends_received.set(0)
 
         elif self._divs_dist_complete.get():
-            if self._switch_dividends_to_staked_tap.get():
+            if self._stake_holders_migration_complete.get():
                 self._update_stake_balances()
                 token_score.clear_yesterdays_stake_changes()
-            else:
-                self._update_balances()
-                token_score.clear_yesterdays_changes()
-            return True
+                return True
         elif self._remaining_tap_divs.get() > 0:
             if self._switch_dividends_to_staked_tap.get():
                 self._distribute_to_stake_holders()
@@ -587,10 +577,7 @@ class Dividends(IconScoreBase):
         This function distributes the dividends to staked tap token holders.
         """
         count = self._batch_size.get()
-        if self._stake_holders_migration_complete.get():
-            length = len(self._stake_holders_copy)
-        else:
-            length = len(self._stake_holders)
+        length = len(self._stake_holders)
         start = self._stake_dist_index.get()
         remaining_addresses = length - start
         if count > remaining_addresses:
@@ -599,10 +586,7 @@ class Dividends(IconScoreBase):
         dividend = self._remaining_tap_divs.get()
         tokens_total = self._total_eligible_staked_tap_tokens.get()
         for i in range(start, end):
-            if self._stake_holders_migration_complete.get():
-                address = self._stake_holders_copy[i]
-            else:
-                address = self._stake_holders[i]
+            address = self._stake_holders[i]
             holder_balance = self._stake_balances[address]
             if holder_balance > 0 and tokens_total > 0:
                 amount = dividend * holder_balance // tokens_total
@@ -735,13 +719,10 @@ class Dividends(IconScoreBase):
         if len(stake_balances) == 0:
             return True
         for address in stake_balances.keys():
-            if self._stake_holders_migration_complete.get():
-                if self._stake_holders_index[address] == 0:
-                    self._stake_holders_copy.put(address)
-                    self._stake_holders_index[address] = len(self._stake_holders_copy)
-            else:
-                if address not in self._stake_holders:
-                    self._stake_holders.put(address)
+            if self._stake_holders_index[address] == 0:
+                self._stake_holders.put(address)
+                self._stake_holders_index[address] = len(self._stake_holders)
+
             self._stake_balances[address] = stake_balances[address]
         return False
 
@@ -859,10 +840,7 @@ class Dividends(IconScoreBase):
 
     @external(readonly=True)
     def get_staked_tap_hold_length(self) -> int:
-        if self._stake_holders_migration_complete.get():
-            return len(self._stake_holders_copy)
-        else:
-            return len(self._stake_holders)
+        return len(self._stake_holders)
 
     @external(readonly=True)
     def divs_share(self) -> dict:
@@ -926,13 +904,9 @@ class Dividends(IconScoreBase):
     def _set_tap_of_exception_address(self):
         tap_token_score = self.create_interface_score(self._token_score.get(), TokenInterface)
         for idx, address in enumerate(self._exception_address):
-            if self._stake_holders_migration_complete.get():
-                if self._stake_holders_index[address] == 0:
-                    self._stake_holders_copy.put(address)
-                    self._stake_holders_index[address] = len(self._stake_holders_copy)
-            else:
-                if address not in self._stake_holders:
-                    self._stake_holders.put(address)
+            if self._stake_holders_index[address] == 0:
+                self._stake_holders.put(address)
+                self._stake_holders_index[address] = len(self._stake_holders)
 
             tap_balance = tap_token_score.balanceOf(Address.from_string(address))
             staked_balance = tap_token_score.staked_balanceOf(Address.from_string(address))
@@ -959,11 +933,9 @@ class Dividends(IconScoreBase):
             count = remaining_addresses
         end = start + count
         for i in range(start, end):
-            # for _address in self._stake_holders:
             _address = self._stake_holders[i]
             if self._stake_holders_index[_address] == 0:
-                self._stake_holders_copy.put(_address)
-                self._stake_holders_index[_address] = len(self._stake_holders_copy)
+                self._stake_holders_index[_address] = i+1
         if end == length:
             self._stake_holders_migration_complete.set(True)
         else:
