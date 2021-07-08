@@ -113,9 +113,6 @@ class Dividends(IconScoreBase):
 
     _EXCEPTION_ADDRESS = "exception_address"
 
-    _INHOUSE_EXCESS = "inhouse_excess"
-    _THIRD_PARTY_EXCESS = "third_party_excess"
-
     @eventlog(indexed=2)
     def FundTransfer(self, winner: str, amount: int, note: str):
         pass
@@ -189,9 +186,6 @@ class Dividends(IconScoreBase):
         self._stake_dist_index = VarDB(self._STAKE_DIST_INDEX, db, value_type=int)
 
         self._switch_dividends_to_staked_tap = VarDB(self._SWITCH_DIVIDENDS_TO_STAKED_TAP, db, value_type=bool)
-
-        self._inhouse_excess = VarDB(self._INHOUSE_EXCESS, db, value_type=int)
-        self._third_party_excess = VarDB(self._THIRD_PARTY_EXCESS, db, value_type=int)
 
         self._exception_address = ArrayDB(self._EXCEPTION_ADDRESS, db, value_type=str)
 
