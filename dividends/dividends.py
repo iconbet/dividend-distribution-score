@@ -439,9 +439,10 @@ class Dividends(IconScoreBase):
             self._dividends_received.set(0)
 
         elif self._divs_dist_complete.get():
-            self._update_stake_balances()
-            token_score.clear_yesterdays_stake_changes()
-            return True
+            if self._stake_holders_migration_complete.get():
+                self._update_stake_balances()
+                token_score.clear_yesterdays_stake_changes()
+                return True
         elif self._remaining_tap_divs.get() > 0:
             self._distribute_to_stake_holders()
         elif self._promo_divs.get() > 0:
