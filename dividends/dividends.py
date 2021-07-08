@@ -78,7 +78,6 @@ class Dividends(IconScoreBase):
     _TAP_DIST_INDEX = "dist_index"
     _BATCH_SIZE = "batch_size"
 
-    _TAP_HOLDERS = "holders"
     _TAP_BALANCES = "balances"
 
     _TOTAL_DIVS = "total_divs"
@@ -141,7 +140,6 @@ class Dividends(IconScoreBase):
         self._batch_size = VarDB(self._BATCH_SIZE, db, value_type=int)
 
         # Tap holders and their balances of TAP tokens
-        self._tap_holders = ArrayDB(self._TAP_HOLDERS, db, value_type=str)
         self._tap_balances = DictDB(self._TAP_BALANCES, db, value_type=int)
         self._total_eligible_tap_tokens = VarDB(self._TOTAL_ELIGIBLE_TAP_TOKENS, db, value_type=int)
 
@@ -177,6 +175,12 @@ class Dividends(IconScoreBase):
         self._dividends_received = VarDB(self._DIVIDENDS_RECEIVED, db, value_type=int)
 
         self._stake_holders = ArrayDB(self._STAKE_HOLDERS, db, value_type=str)
+        self._stake_holders_index = DictDB(f'{self._STAKE_HOLDERS}_indexes', db, value_type=int)
+
+        self._stake_holders_migration_start = VarDB(f'{self._STAKE_HOLDERS}_migration_start', db, value_type=bool)
+        self._stake_holders_migration_complete = VarDB(f'{self._STAKE_HOLDERS}_migration_complete', db, value_type=bool)
+        self._stake_holders_migration_index = VarDB(f'{self._STAKE_HOLDERS}_migration_index', db, value_type=int)
+
         self._stake_balances = DictDB(self._STAKE_BALANCES, db, value_type=int)
         self._total_eligible_staked_tap_tokens = VarDB(self._TOTAL_ELIGIBLE_STAKED_TAP_TOKENS, db, value_type=int)
         self._stake_dist_index = VarDB(self._STAKE_DIST_INDEX, db, value_type=int)
@@ -211,10 +215,10 @@ class Dividends(IconScoreBase):
         if self.msg.sender != self.owner:
             revert(f"{TAG}: Only the owner of the score can call the method")
         if not (
-            0 <= _tap <= 100
-            and 0 <= _gamedev <= 100
-            and 0 <= _promo <= 100
-            and 0 <= _platform <= 100
+                0 <= _tap <= 100
+                and 0 <= _gamedev <= 100
+                and 0 <= _promo <= 100
+                and 0 <= _platform <= 100
         ):
             revert(f"{TAG}: The parameters must be between 0 to 100")
         if _tap + _gamedev + _platform + _promo != 100:
@@ -392,6 +396,8 @@ class Dividends(IconScoreBase):
         :return: True if distribution is completed
         :rtype: bool
         """
+        if self.get_stake_holders_migration_start() and not self.get_stake_holders_migration_complete():
+            self._migrate_stake_holders()
         token_score = self.create_interface_score(self._token_score.get(), TokenInterface)
 
         if self._dividends_received.get() == 1:
@@ -403,15 +409,12 @@ class Dividends(IconScoreBase):
                 self._set_total_tap()
 
         elif self._dividends_received.get() == 2:
-            if self._switch_dividends_to_staked_tap.get():
+            if self._stake_holders_migration_complete.get():
                 if self._update_stake_balances():
                     token_score.switch_stake_update_db()
                     # calculate total eligible staked tap tokens
                     self._set_total_staked_tap()
                     self._set_tap_of_exception_address()
-                    self._dividends_received.set(3)
-            else:
-                if self._update_balances():
                     self._dividends_received.set(3)
 
         elif self._dividends_received.get() == 3:
@@ -432,26 +435,16 @@ class Dividends(IconScoreBase):
                 # Set the games making excess and their excess balance and the dividends of categories
                 self._set_games()
 
-            if self._switch_dividends_to_staked_tap.get():
-                self._batch_size.set(game_score.get_batch_size(len(self._stake_holders)))
-            else:
-                self._batch_size.set(game_score.get_batch_size(len(self._tap_holders)))
-
+            self._batch_size.set(game_score.get_batch_size(len(self._stake_holders)))
             self._dividends_received.set(0)
 
         elif self._divs_dist_complete.get():
-            if self._switch_dividends_to_staked_tap.get():
+            if self._stake_holders_migration_complete.get():
                 self._update_stake_balances()
                 token_score.clear_yesterdays_stake_changes()
-            else:
-                self._update_balances()
-                token_score.clear_yesterdays_changes()
-            return True
+                return True
         elif self._remaining_tap_divs.get() > 0:
-            if self._switch_dividends_to_staked_tap.get():
-                self._distribute_to_stake_holders()
-            else:
-                self._distribute_to_tap_holders()
+            self._distribute_to_stake_holders()
         elif self._promo_divs.get() > 0:
             self._distribute_to_promo_address()
         elif self._daofund_divs.get() > 0:
@@ -464,47 +457,6 @@ class Dividends(IconScoreBase):
             self._divs_dist_complete.set(True)
             return True
         return False
-
-    def _distribute_to_tap_holders(self) -> None:
-        """
-        This function distributes the dividends to tap token holders except the blacklist addresses.
-        """
-        count = self._batch_size.get()
-        length = len(self._tap_holders)
-        start = self._tap_dist_index.get()
-        remaining_addresses = length - start
-        if count > remaining_addresses:
-            count = remaining_addresses
-        end = start + count
-        dividend = self._remaining_tap_divs.get()
-        tokens_total = self._total_eligible_tap_tokens.get()
-        for i in range(start, end):
-            address = self._tap_holders[i]
-            holder_balance = self._tap_balances[address]
-            if holder_balance > 0 and tokens_total > 0:
-                amount = dividend * holder_balance // tokens_total
-                dividend -= amount
-                tokens_total -= holder_balance
-                try:
-                    self.icx.transfer(Address.from_string(address), amount)
-                    self.FundTransfer(address, amount, "Dividends distribution to tap holder")
-                except BaseException as e:
-                    if Address.from_string(address).is_contract:
-                        self.set_blacklist_address(address)
-                    else:
-                        revert(
-                            f"Network problem while sending dividends to tap holders."
-                            f"Distribution of {amount} not sent to {address}. "
-                            f"Will try again later. "
-                            f"Exception: {e}"
-                        )
-        self._remaining_tap_divs.set(dividend)
-        self._total_eligible_tap_tokens.set(tokens_total)
-        if end == length or dividend <= 0:
-            self._tap_dist_index.set(0)
-            self._remaining_tap_divs.set(0)
-        else:
-            self._tap_dist_index.set(start + count)
 
     def _distribute_to_promo_address(self) -> None:
         """
@@ -696,27 +648,8 @@ class Dividends(IconScoreBase):
         """
         if self.msg.sender == self.owner:
             self.BlacklistAddress(_address, "Added to Blacklist")
-            if _address in self._tap_holders:
-                self._remove_from_holders_list(_address)
             if _address not in self._blacklist_address:
                 self._blacklist_address.put(_address)
-
-    def _remove_from_holders_list(self, _address: str) -> None:
-        """
-        Removes the address from tap token holders list
-        :param _address: Address to be removed from tap token holders list
-        :type _address: :class:`iconservice.base.address.Address`
-        :return:
-        """
-        if _address not in self._tap_holders:
-            return
-        # get the topmost value
-        top = self._tap_holders.pop()
-        if top != _address:
-            for i in range(len(self._tap_holders)):
-                if self._tap_holders[i] == _address:
-                    self._tap_holders[i] = top
-        self._tap_balances.remove(_address)
 
     @external
     def set_inhouse_games(self, _score: Address) -> None:
@@ -777,8 +710,10 @@ class Dividends(IconScoreBase):
         if len(stake_balances) == 0:
             return True
         for address in stake_balances.keys():
-            if address not in self._stake_holders:
+            if self._stake_holders_index[address] == 0:
                 self._stake_holders.put(address)
+                self._stake_holders_index[address] = len(self._stake_holders)
+
             self._stake_balances[address] = stake_balances[address]
         return False
 
@@ -793,8 +728,6 @@ class Dividends(IconScoreBase):
             return True
         for address in tap_balances.keys():
             if address not in self._blacklist_address:
-                if address not in self._tap_holders:
-                    self._tap_holders.put(address)
                 self._tap_balances[address] = tap_balances[address]
         return False
 
@@ -845,8 +778,9 @@ class Dividends(IconScoreBase):
         game_developers_amount = (game_developers_share * positive_excess) // 100
         tap_holders_amount = self.icx.get_balance(self.address) - game_developers_amount
 
-        self._remaining_gamedev_divs.set((self._dividend_percentage[1] * game_developers_amount)//game_developers_share)
-        self._platform_divs.set((self._dividend_percentage[3] * game_developers_amount)//game_developers_share)
+        self._remaining_gamedev_divs.set(
+            (self._dividend_percentage[1] * game_developers_amount) // game_developers_share)
+        self._platform_divs.set((self._dividend_percentage[3] * game_developers_amount) // game_developers_share)
         if tap_holders_amount > 0:
             tap_holders_share = (self._dividend_percentage[0] + self._dividend_percentage[2])
             self._remaining_tap_divs.set((self._dividend_percentage[0] * tap_holders_amount) // tap_holders_share)
@@ -894,10 +828,6 @@ class Dividends(IconScoreBase):
         else:
             self._remaining_tap_divs.set(0)
             self._promo_divs.set(0)
-
-    @external(readonly=True)
-    def get_tap_hold_length(self) -> int:
-        return len(self._tap_holders)
 
     @external(readonly=True)
     def get_staked_tap_hold_length(self) -> int:
@@ -965,12 +895,14 @@ class Dividends(IconScoreBase):
     def _set_tap_of_exception_address(self):
         tap_token_score = self.create_interface_score(self._token_score.get(), TokenInterface)
         for idx, address in enumerate(self._exception_address):
-            if address not in self._stake_holders:
+            if self._stake_holders_index[address] == 0:
                 self._stake_holders.put(address)
+                self._stake_holders_index[address] = len(self._stake_holders)
+
             tap_balance = tap_token_score.balanceOf(Address.from_string(address))
             staked_balance = tap_token_score.staked_balanceOf(Address.from_string(address))
             self._stake_balances[address] = tap_balance
-            self._total_eligible_staked_tap_tokens.set(self._total_eligible_staked_tap_tokens.get()+tap_balance
+            self._total_eligible_staked_tap_tokens.set(self._total_eligible_staked_tap_tokens.get() + tap_balance
                                                        - staked_balance)
 
     @payable
@@ -981,3 +913,34 @@ class Dividends(IconScoreBase):
             self.DivsReceived(self._total_divs.get(), self._batch_size.get())
         else:
             revert(f"{TAG}: Funds can only be accepted from the game contract.")
+
+    def _migrate_stake_holders(self):
+        count = self._batch_size.get()
+        length = len(self._stake_holders)
+        start = self._stake_holders_migration_index.get()
+        remaining_addresses = length - start
+        if count > remaining_addresses:
+            count = remaining_addresses
+        end = start + count
+        for i in range(start, end):
+            _address = self._stake_holders[i]
+            if self._stake_holders_index[_address] == 0:
+                self._stake_holders_index[_address] = i+1
+        if end == length:
+            self._stake_holders_migration_complete.set(True)
+        else:
+            self._stake_holders_migration_index.set(start + count)
+
+    @external(readonly=True)
+    def get_stake_holders_migration_start(self) -> bool:
+        return self._stake_holders_migration_start.get()
+
+    @external
+    def set_stake_holders_migration_start(self):
+        if self.msg.sender != self.owner:
+            revert(f"{TAG}: Only the owner of the score can call the method")
+        self._stake_holders_migration_start.set(True)
+
+    @external(readonly=True)
+    def get_stake_holders_migration_complete(self) -> bool:
+        return self._stake_holders_migration_complete.get()
