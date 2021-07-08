@@ -403,7 +403,7 @@ class Dividends(IconScoreBase):
         :rtype: bool
         """
         if self.get_stake_holders_migration_start() and not self.get_stake_holders_migration_complete():
-            self.migrate_stake_holders()
+            self._migrate_stake_holders()
         token_score = self.create_interface_score(self._token_score.get(), TokenInterface)
 
         if self._dividends_received.get() == 1:
@@ -923,8 +923,7 @@ class Dividends(IconScoreBase):
         else:
             revert(f"{TAG}: Funds can only be accepted from the game contract.")
 
-    @external
-    def migrate_stake_holders(self):
+    def _migrate_stake_holders(self):
         count = self._batch_size.get()
         length = len(self._stake_holders)
         start = self._stake_holders_migration_index.get()
