@@ -948,7 +948,7 @@ class Dividends(IconScoreBase):
     def set_stake_holders_migration_start(self):
         if self.msg.sender != self.owner:
             revert(f"{TAG}: Only the owner of the score can call the method")
-        return self._stake_holders_migration_start.set(True)
+        self._stake_holders_migration_start.set(True)
 
     @external(readonly=True)
     def get_stake_holders_migration_complete(self) -> bool:
