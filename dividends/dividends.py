@@ -486,9 +486,9 @@ class Dividends(IconScoreBase):
         address = self._daofund_score.get()
         if amount > 0:
             try:
+                self._daofund_divs.set(0)
                 self.FundTransfer(str(address), amount, "Dividends distribution to DAOFund contract")
                 self.icx.transfer(self._daofund_score.get(), amount)
-                self._daofund_divs.set(0)
             except BaseException as e:
                 revert(
                     f"{TAG}: Network problem while sending to game SCORE. Distribution of {amount} not sent to {address}. "
