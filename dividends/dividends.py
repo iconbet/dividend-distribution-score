@@ -924,7 +924,7 @@ class Dividends(IconScoreBase):
         for i in range(start, end):
             _address = self._stake_holders[i]
             if self._stake_holders_index[_address] == 0:
-                self._stake_holders_index[_address] = i+1
+                self._stake_holders_index[_address] = i + 1
         if end == length:
             self._stake_holders_migration_complete.set(True)
         else:
