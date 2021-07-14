@@ -944,3 +944,9 @@ class Dividends(IconScoreBase):
     @external(readonly=True)
     def get_stake_holders_migration_complete(self) -> bool:
         return self._stake_holders_migration_complete.get()
+
+    @payable
+    @external
+    def add_funds(self):
+        if self.msg.sender != self.owner:
+            revert(f"{TAG}: Only owner can transfer the amount to dividends contract.")
