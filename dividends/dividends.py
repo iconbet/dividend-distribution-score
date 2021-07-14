@@ -195,7 +195,6 @@ class Dividends(IconScoreBase):
 
     def on_update(self) -> None:
         super().on_update()
-        self._daofund_score.set(Address.from_string("cx3efe110f76be1c223547f4c1a62dcc681f11af34"))
 
     @external
     def set_dividend_percentage(self, _tap: int, _gamedev: int, _promo: int, _platform: int) -> None:
