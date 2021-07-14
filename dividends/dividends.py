@@ -195,7 +195,6 @@ class Dividends(IconScoreBase):
 
     def on_update(self) -> None:
         super().on_update()
-        self._daofund_score.set(Address.from_string("cx3efe110f76be1c223547f4c1a62dcc681f11af34"))
 
     @external
     def set_dividend_percentage(self, _tap: int, _gamedev: int, _promo: int, _platform: int) -> None:
@@ -925,7 +924,7 @@ class Dividends(IconScoreBase):
         for i in range(start, end):
             _address = self._stake_holders[i]
             if self._stake_holders_index[_address] == 0:
-                self._stake_holders_index[_address] = i+1
+                self._stake_holders_index[_address] = i + 1
         if end == length:
             self._stake_holders_migration_complete.set(True)
         else:
@@ -944,3 +943,9 @@ class Dividends(IconScoreBase):
     @external(readonly=True)
     def get_stake_holders_migration_complete(self) -> bool:
         return self._stake_holders_migration_complete.get()
+
+    @payable
+    @external
+    def add_funds(self):
+        if self.msg.sender != self.owner:
+            revert(f"{TAG}: Only owner can transfer the amount to dividends contract.")
