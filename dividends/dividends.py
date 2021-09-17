@@ -821,7 +821,7 @@ class Dividends(IconScoreBase):
         self._daofund_divs.set(daofund_amount)
         self._platform_divs.set(0)
         if tap_holders_amount > 0:
-            tap_divs = tap_holders_amount * 80 // 90
+            tap_divs = tap_holders_amount * 65 // 75
             self._remaining_tap_divs.set(tap_divs)
             self._promo_divs.set(tap_holders_amount - tap_divs)
         else:
